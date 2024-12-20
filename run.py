@@ -265,6 +265,10 @@ if args.analysis_level == "participant":
                                                suffix='T1w',
                                                extensions=["nii.gz", "nii"],
                                                **session_to_analyze)]
+        if len(t1ws) == 0:
+            t1ws = [f.path for f in layout.get(subject=subject_label,
+                                                   suffix='T1w',
+                                                   extensions=["nii.gz", "nii"])]
         assert (len(t1ws) > 0), "No T1w files found for subject %s!"%subject_label
 
         available_resolutions = ["0.7", "0.8", "1"]
@@ -277,6 +281,10 @@ if args.analysis_level == "participant":
                             suffix='T2w',
                             extensions=["nii.gz", "nii"],
                             **session_to_analyze)]
+        if len(t2ws) == 0:
+            t2ws = [f.path for f in layout.get(subject=subject_label,
+                                                   suffix='T2w',
+                                                   extensions=["nii.gz", "nii"])]
         if (len(t2ws) > 0) and ( args.processing_mode != 'legacy'):
             t2_zooms = nibabel.load(t2ws[0]).header.get_zooms()
             t2_res = float(min(t2_zooms[:3]))
