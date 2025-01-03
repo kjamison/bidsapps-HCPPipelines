@@ -208,7 +208,7 @@ parser.add_argument('--n_cpus', help='Number of CPUs/cores available to use.',
 parser.add_argument('--stages', help='Which stages to run. Space separated list.',
                    nargs="+", choices=['PreFreeSurfer', 'FreeSurfer',
                                        'PostFreeSurfer', 'fMRIVolume',
-                                       'fMRISurface'],
+                                       'fMRISurface','DiffusionPreprocessing'],
                    default=['PreFreeSurfer', 'FreeSurfer', 'PostFreeSurfer',
                             'fMRIVolume', 'fMRISurface'])
 parser.add_argument('--coreg', help='Coregistration method to use',
@@ -521,31 +521,50 @@ if args.analysis_level == "participant":
                     print(f"Processing {fmritcs} in {func_processing_mode} mode.")
                     stage_func()
 
-        dwis = layout.get(subject=subject_label, suffix='dwi',
-                                                 extensions=["nii.gz", "nii"])
+        dwis=[f.path for f in layout.get(subject=subject_label,
+                                                       suffix='dwi',
+                                                       extensions=["nii.gz", "nii"],**session_to_analyze)]
+                                                       
+        
+        pos = []; neg = []
+        PEdir = None; echospacing = None
 
-        # print(dwis)
-        # acqs = set(layout.get(target='acquisition', return_type='id',
-        #                       subject=subject_label, type='dwi',
-        #                       extensions=["nii.gz", "nii"]))
-        # print(acqs)
-        # posData = []
-        # negData = []
-        # for acq in acqs:
-        #     pos = "EMPTY"
-        #     neg = "EMPTY"
-        #     dwis = layout.get(subject=subject_label,
-        #                       type='dwi', acquisition=acq,
-        #                       extensions=["nii.gz", "nii"])
-        #     assert len(dwis) <= 2
-        #     for dwi in dwis:
-        #         dwi = dwi.filename
-        #         if "-" in layout.get_metadata(dwi)["PhaseEncodingDirection"]:
-        #             neg = dwi
-        #         else:
-        #             pos = dwi
-        #     posData.append(pos)
-        #     negData.append(neg)
-        #
-        # print(negData)
-        # print(posData)
+        for idx,dwi in enumerate(dwis):
+            metadata = layout.get_metadata(dwi)
+            # get phaseencodingdirection
+            phaseenc = metadata['PhaseEncodingDirection']
+            
+            acq = 1 if 'i' in phaseenc else 2
+            if not PEdir:
+                PEdir = acq
+            if PEdir != acq:
+                raise RuntimeError("Not all dwi images have the same encoding direction (both LR and AP). Not implemented.")
+            # get pos/neg
+            if "-" in phaseenc:
+                neg.append(dwi)
+            else:
+                pos.append(dwi)
+            # get echospacing
+            if not echospacing:
+                echospacing = metadata['EffectiveEchoSpacing']*1000.
+            if echospacing != metadata['EffectiveEchoSpacing']*1000.:
+                raise RuntimeError("Not all dwi images have the same echo spacing. Not implemented.")
+
+        posdata = "@".join(pos)
+        negdata = "@".join(neg)
+
+        diff_stages_dict = OrderedDict([("DiffusionPreprocessing", partial(run_diffusion_processsing,
+                                                 path=args.output_dir,
+                                                 subject="sub-%s"%subject_label,
+                                                 posData=posdata,
+                                                 negData=negdata,
+                                                 echospacing=echospacing,
+                                                 n_cpus=args.n_cpus,
+                                                 PEdir=PEdir,
+                                                 gdcoeffs=args.gdcoeffs))
+                       ])
+                       
+        for stage, stage_diff in diff_stages_dict.items():
+            if stage in args.stages:
+                print(f"{stage} {dwis}.")
+                stage_diff()
