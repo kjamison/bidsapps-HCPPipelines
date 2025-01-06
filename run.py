@@ -174,7 +174,11 @@ def run_diffusion_processsing(**args):
       '--echospacing="{echospacing}" '+ \
       '--PEdir={PEdir} ' + \
       '--gdcoeffs={gdcoeffs} ' + \
-      '--printcom=""'
+      '--printcom="" '
+    if args["eddy_no_gpu"]:
+        cmd = cmd + ' --no-gpu '
+    if args["extra_eddy_args"]:
+        cmd = cmd + " ".join(["--extra-eddy-arg="+s for s in args["extra_eddy_args"].split()])
     cmd = cmd.format(**args)
     run(cmd, cwd=args["path"], env={"OMP_NUM_THREADS": str(args["n_cpus"])})
 
@@ -232,6 +236,10 @@ parser.add_argument('--processing_mode', '--processing-mode',
                          'auto: use T2w and/or fieldmaps if available')
 parser.add_argument('--doslicetime', help="Apply slice timing correction as part of fMRIVolume.",
                     action='store_true', default=False)
+parser.add_argument('--diffusion_eddy_no_gpu', help="Do NOT use GPU version of eddy during DiffusionPreprocessing.",
+                    action='store_true', default=False)
+parser.add_argument('--diffusion_eddy_args', help="String of extra args for eddy during DiffusionPreprocessing.",
+                    default='')
 
 args = parser.parse_args()
 
@@ -561,7 +569,9 @@ if args.analysis_level == "participant":
                                                  echospacing=echospacing,
                                                  n_cpus=args.n_cpus,
                                                  PEdir=PEdir,
-                                                 gdcoeffs=args.gdcoeffs))
+                                                 gdcoeffs=args.gdcoeffs,
+                                                 eddy_no_gpu=args.diffusion_eddy_no_gpu,
+                                                 extra_eddy_args=args.diffusion_eddy_args))
                        ])
                        
         for stage, stage_diff in diff_stages_dict.items():
