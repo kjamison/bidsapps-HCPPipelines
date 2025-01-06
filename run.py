@@ -175,6 +175,7 @@ def run_diffusion_processsing(**args):
       '--echospacing="{echospacing}" '+ \
       '--PEdir={PEdir} ' + \
       '--gdcoeffs={gdcoeffs} ' + \
+      '--dwiname={dwiname} ' + \
       '--printcom="" '
     if args["eddy_no_gpu"]:
         cmd = cmd + ' --no-gpu '
@@ -237,11 +238,12 @@ parser.add_argument('--processing_mode', '--processing-mode',
                          'auto: use T2w and/or fieldmaps if available')
 parser.add_argument('--doslicetime', help="Apply slice timing correction as part of fMRIVolume.",
                     action='store_true', default=False)
+parser.add_argument('--diffusion_output_name', help="Output base name for DiffusionPreprocessing.",
+                    default='Diffusion')
 parser.add_argument('--diffusion_eddy_no_gpu', help="Do NOT use GPU version of eddy during DiffusionPreprocessing.",
                     action='store_true', default=False)
 parser.add_argument('--diffusion_eddy_args', help="String of extra args for eddy during DiffusionPreprocessing.",
                     default='')
-
 args = parser.parse_args()
 
 
@@ -586,6 +588,7 @@ if args.analysis_level == "participant":
                                                  n_cpus=args.n_cpus,
                                                  PEdir=PEdir,
                                                  gdcoeffs=args.gdcoeffs,
+                                                 dwiname=args.diffusion_output_name,
                                                  eddy_no_gpu=args.diffusion_eddy_no_gpu,
                                                  extra_eddy_args=args.diffusion_eddy_args))
                        ])
