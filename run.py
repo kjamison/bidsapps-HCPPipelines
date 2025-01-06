@@ -8,6 +8,7 @@ from subprocess import Popen, PIPE
 from shutil import rmtree
 import subprocess
 from bids.layout import BIDSLayout
+from bids.layout.models import *
 from functools import partial
 from collections import OrderedDict
 from pathlib import Path
@@ -536,9 +537,21 @@ if args.analysis_level == "participant":
         
         pos = []; neg = []
         PEdir = None; echospacing = None
-
+        dwi_jsonfile=None
+        
         for idx,dwi in enumerate(dwis):
             metadata = layout.get_metadata(dwi)
+            
+            #get metadata json file path so we can pass it to the eddy command
+            dwi_file_entities=layout.parse_file_entities(dwi)
+            dwi_file_entities['extension']='json'
+            try:
+                metadata_jsonfile=layout.get(**dwi_file_entities)
+                if len(metadata_jsonfile)>0:
+                    dwi_jsonfile=metadata_jsonfile[0].path
+            except:
+                pass
+            
             # get phaseencodingdirection
             phaseenc = metadata['PhaseEncodingDirection']
             
@@ -561,6 +574,9 @@ if args.analysis_level == "participant":
         posdata = "@".join(pos)
         negdata = "@".join(neg)
 
+        if dwi_jsonfile:
+            args.diffusion_eddy_args += f" --json={dwi_jsonfile}"
+        
         diff_stages_dict = OrderedDict([("DiffusionPreprocessing", partial(run_diffusion_processsing,
                                                  path=args.output_dir,
                                                  subject="sub-%s"%subject_label,
