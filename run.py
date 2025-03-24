@@ -184,6 +184,56 @@ def run_diffusion_processsing(**args):
     cmd = cmd.format(**args)
     run(cmd, cwd=args["path"], env={"OMP_NUM_THREADS": str(args["n_cpus"])})
 
+def run_diffusion_processsing_preeddy(**args):
+    args.update(os.environ)
+    if not "b0maxbval" in args or not args["b0maxbval"]:
+        args['b0maxbval']=50
+    cmd = '{HCPPIPEDIR}/DiffusionPreprocessing/DiffPreprocPipeline_PreEddy.sh ' + \
+      '--posData="{posData}" ' +\
+      '--negData="{negData}" ' + \
+      '--path="{path}" ' + \
+      '--subject="{subject}" ' + \
+      '--echospacing="{echospacing}" '+ \
+      '--PEdir={PEdir} ' + \
+      '--dwiname={dwiname} ' + \
+      '--b0maxbval={b0maxbval} ' + \
+      '--printcom="" '
+    cmd = cmd.format(**args)
+    run(cmd, cwd=args["path"], env={"OMP_NUM_THREADS": str(args["n_cpus"])})
+
+def run_diffusion_processsing_eddy(**args):
+    args.update(os.environ)
+    cmd = '{HCPPIPEDIR}/DiffusionPreprocessing/DiffPreprocPipeline_Eddy.sh ' + \
+      '--path="{path}" ' + \
+      '--subject="{subject}" ' + \
+      '--dwiname={dwiname} ' + \
+      '--printcom="" '
+    if args["eddy_no_gpu"]:
+        cmd = cmd + ' --no-gpu '
+    if args["extra_eddy_args"]:
+        cmd = cmd + " ".join(["--extra-eddy-arg="+s for s in args["extra_eddy_args"].split()])
+    cmd = cmd.format(**args)
+    run(cmd, cwd=args["path"], env={"OMP_NUM_THREADS": str(args["n_cpus"])})
+    
+def run_diffusion_processsing_posteddy(**args):
+    args.update(os.environ)
+    if not "dof" in args or not args["dof"]:
+        args['dof']=6
+    if not "combinedataflag" in args or not args["combinedataflag"]:
+        args["combinedataflag"]=1
+    cmd = '{HCPPIPEDIR}/DiffusionPreprocessing/DiffPreprocPipeline_PostEddy.sh ' + \
+      '--path="{path}" ' + \
+      '--subject="{subject}" ' + \
+      '--dwiname={dwiname} ' + \
+      '--gdcoeffs={gdcoeffs} ' + \
+      '--dof={dof} ' + \
+      '--combine-data-flag={combinedataflag} ' + \
+      '--printcom="" '
+    if 'user_matrix' in args and args['user_matrix']:
+        cmd = cmd + ' --user-defined-matrix="{user_matrix}" '
+    cmd = cmd.format(**args)
+    run(cmd, cwd=args["path"], env={"OMP_NUM_THREADS": str(args["n_cpus"])})
+
 __version__ = open('/version').read()
 
 parser = argparse.ArgumentParser(description='HCP Pipelines BIDS App (T1w, T2w, fMRI)')
@@ -214,7 +264,8 @@ parser.add_argument('--n_cpus', help='Number of CPUs/cores available to use.',
 parser.add_argument('--stages', help='Which stages to run. Space separated list.',
                    nargs="+", choices=['PreFreeSurfer', 'FreeSurfer',
                                        'PostFreeSurfer', 'fMRIVolume',
-                                       'fMRISurface','DiffusionPreprocessing'],
+                                       'fMRISurface','DiffusionPreprocessing',
+                                       'DiffusionPreprocessing_PreEddy','DiffusionPreprocessing_Eddy','DiffusionPreprocessing_PostEddy'],
                    default=['PreFreeSurfer', 'FreeSurfer', 'PostFreeSurfer',
                             'fMRIVolume', 'fMRISurface'])
 parser.add_argument('--coreg', help='Coregistration method to use',
@@ -243,6 +294,8 @@ parser.add_argument('--diffusion_output_name', help="Output base name for Diffus
 parser.add_argument('--diffusion_eddy_no_gpu', help="Do NOT use GPU version of eddy during DiffusionPreprocessing.",
                     action='store_true', default=False)
 parser.add_argument('--diffusion_eddy_args', help="String of extra args for eddy during DiffusionPreprocessing.",
+                    default='')
+parser.add_argument('--diffusion_usermatrix', help="Matrix file to use instead of registering output to T1w.",
                     default='')
 args = parser.parse_args()
 
@@ -594,6 +647,36 @@ if args.analysis_level == "participant":
                        ])
                        
         for stage, stage_diff in diff_stages_dict.items():
+            if stage in args.stages:
+                print(f"{stage} {dwis}.")
+                stage_diff()
+                
+        diff_substages_dict = OrderedDict([("DiffusionPreprocessing_PreEddy", partial(run_diffusion_processsing_preeddy,
+                                                 path=args.output_dir,
+                                                 subject="sub-%s"%subject_label,
+                                                 posData=posdata,
+                                                 negData=negdata,
+                                                 echospacing=echospacing,
+                                                 n_cpus=args.n_cpus,
+                                                 PEdir=PEdir,
+                                                 dwiname=args.diffusion_output_name)),
+                                        ("DiffusionPreprocessing_Eddy", partial(run_diffusion_processsing_eddy,
+                                                 path=args.output_dir,
+                                                 subject="sub-%s"%subject_label,
+                                                 n_cpus=args.n_cpus,
+                                                 dwiname=args.diffusion_output_name,
+                                                 eddy_no_gpu=args.diffusion_eddy_no_gpu,
+                                                 extra_eddy_args=args.diffusion_eddy_args)),
+                                        ("DiffusionPreprocessing_PostEddy", partial(run_diffusion_processsing_posteddy,
+                                                 path=args.output_dir,
+                                                 subject="sub-%s"%subject_label,
+                                                 n_cpus=args.n_cpus,
+                                                 dwiname=args.diffusion_output_name,
+                                                 gdcoeffs=args.gdcoeffs,
+                                                 user_matrix=args.diffusion_usermatrix))
+                       ])
+        
+        for stage, stage_diff in diff_substages_dict.items():
             if stage in args.stages:
                 print(f"{stage} {dwis}.")
                 stage_diff()
